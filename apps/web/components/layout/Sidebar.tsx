@@ -93,11 +93,11 @@ export function Sidebar() {
           {!collapsed && (
             <div className="min-w-0">
               <p className="text-[12px] font-semibold leading-none tracking-tight truncate"
-                 style={{ color: "hsl(0 0% 90%)" }}>
+                 style={{ color: "#ededed" }}>
                 Netindavoid
               </p>
               <p className="text-[9px] mt-0.5 font-bold uppercase tracking-[0.14em]"
-                 style={{ color: "#7c3aed" }}>
+                 style={{ color: "#8b5cf6" }}>
                 Security
               </p>
             </div>
@@ -112,10 +112,10 @@ export function Sidebar() {
             {group.section && !collapsed && (
               <>
                 <p className="px-2 pt-1 pb-1 text-[9px] font-bold uppercase tracking-widest"
-                   style={{ color: "hsl(240 4% 35%)" }}>
+                   style={{ color: "#555" }}>
                   {group.section}
                 </p>
-                <div className="mb-1 mx-2 border-t" style={{ borderColor: "hsl(0 0% 18%)" }} />
+                <div className="mb-1 mx-2 border-t" style={{ borderColor: "hsl(0 0% 14%)" }} />
               </>
             )}
 
@@ -133,7 +133,7 @@ export function Sidebar() {
                       ? "nav-active"
                       : "nav-hover",
                   )}
-                  style={!active ? { color: "hsl(240 4% 56%)" } : undefined}
+                  style={!active ? { color: "#737373" } : undefined}
                 >
                   <Icon
                     className={cn(
@@ -142,7 +142,7 @@ export function Sidebar() {
                         ? "text-[#a78bfa]"
                         : "group-hover:text-[#c4b5fd]",
                     )}
-                    style={!active ? { color: "hsl(240 4% 40%)" } : undefined}
+                    style={!active ? { color: "#555" } : undefined}
                   />
                   {!collapsed && (
                     <>
@@ -173,11 +173,11 @@ export function Sidebar() {
             "group flex items-center gap-2.5 rounded-[4px] px-2 py-[6px] text-[12px] font-medium transition-colors duration-100",
             isActive("/settings") ? "nav-active" : "nav-hover",
           )}
-          style={!isActive("/settings") ? { color: "hsl(240 4% 56%)" } : undefined}
+          style={!isActive("/settings") ? { color: "#737373" } : undefined}
         >
           <Settings
             className={cn("h-3.5 w-3.5 shrink-0", isActive("/settings") ? "text-[#a78bfa]" : "group-hover:text-[#c4b5fd]")}
-            style={!isActive("/settings") ? { color: "hsl(240 4% 40%)" } : undefined}
+            style={!isActive("/settings") ? { color: "#555" } : undefined}
           />
           {!collapsed && <span>Settings</span>}
         </Link>
