@@ -17,6 +17,8 @@ apps/api/.env
 apps/electron/.env.build
 .env.local
 *.env.local
+**/.env.local
+apps/web/.env.local
 
 # Logs
 logs/
