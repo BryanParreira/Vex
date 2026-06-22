@@ -1,6 +1,6 @@
 {
   "name": "netindavoid",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Network Security Monitoring Platform",
   "main": "main.js",
   "author": "Bryan Bernardo Parreira",
@@ -23,7 +23,7 @@
   "build": {
     "appId": "com.netindavoid.app",
     "productName": "Netindavoid",
-    "copyright": "Copyright © 2026 Bryan Bernardo Parreira",
+    "copyright": "Copyright \u00a9 2026 Bryan Bernardo Parreira",
     "directories": {
       "output": "dist",
       "buildResources": "build"
@@ -42,8 +42,18 @@
       "category": "public.app-category.utilities",
       "icon": "build/icon.icns",
       "target": [
-        { "target": "dmg", "arch": ["arm64"] },
-        { "target": "zip", "arch": ["arm64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
       ],
       "identity": "Bryan Bernardo Parreira (5PNLAR99PK)",
       "hardenedRuntime": true,
@@ -55,10 +65,22 @@
       "title": "Netindavoid ${version}",
       "background": null,
       "backgroundColor": "#111113",
-      "window": { "width": 540, "height": 380 },
+      "window": {
+        "width": 540,
+        "height": 380
+      },
       "contents": [
-        { "x": 130, "y": 190, "type": "file" },
-        { "x": 410, "y": 190, "type": "link", "path": "/Applications" }
+        {
+          "x": 130,
+          "y": 190,
+          "type": "file"
+        },
+        {
+          "x": 410,
+          "y": 190,
+          "type": "link",
+          "path": "/Applications"
+        }
       ]
     },
     "afterPack": "beforeSign.js",
