@@ -72,7 +72,10 @@ async def _run_network_scan_async(scan_id: str, tenant_id: str, scan_type: str):
         await db.commit()
 
         try:
-            hosts = scan_network(settings.SCAN_NETWORK_CIDR)
+            from services.network import get_subnet_cidr
+            cidr = scan.target_cidr or get_subnet_cidr()
+            logger.info("scanning network", cidr=cidr)
+            hosts = scan_network(cidr)
             new_count = 0
             from models.alert import Alert, AlertSeverity, AlertCategory
 

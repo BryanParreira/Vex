@@ -11,16 +11,20 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import structlog
+from services.network import get_active_interface
 
 logger = structlog.get_logger()
 
-# Active interface — en0 is WiFi, en1 is Ethernet on most Macs
-ACTIVE_IFACE = "en0"
+
+def _active_iface() -> str:
+    return get_active_interface()
 
 
 # ── Traffic ───────────────────────────────────────────────────────────────────
 
-def _netstat_bytes(iface: str = ACTIVE_IFACE) -> tuple[int, int]:
+def _netstat_bytes(iface: str | None = None) -> tuple[int, int]:
+    if iface is None:
+        iface = _active_iface()
     """Return (bytes_in, bytes_out) for the given interface via netstat -ibn."""
     try:
         out = subprocess.run(["netstat", "-ibn"], capture_output=True, text=True, timeout=5).stdout
