@@ -3,40 +3,40 @@
 @tailwind utilities;
 
 @layer base {
-  /* ── Premium dark grey + purple accent ──────────────────────────────────── */
+  /* ── Warp-dark inspired: deep navy + violet accent ───────────────────────── */
   :root {
-    --background:         240 6% 8%;     /* #111113  near-black, slightly cool  */
-    --foreground:         240 5% 90%;    /* #e4e4e7  zinc-200                   */
+    --background:         232 15% 10%;   /* #14151f  deep navy-black            */
+    --foreground:         228 20% 85%;   /* #cdd0e0  blue-tinted white          */
 
-    --card:               240 5% 11%;    /* #18181b  zinc-900                   */
-    --card-foreground:    240 5% 90%;
+    --card:               232 14% 13%;   /* #191a26  slightly lighter than bg   */
+    --card-foreground:    228 20% 85%;
 
-    --popover:            240 5% 9%;
-    --popover-foreground: 240 5% 90%;
+    --popover:            232 15% 11%;
+    --popover-foreground: 228 20% 85%;
 
-    --primary:            263 70% 70%;   /* #a78bfa  violet-400                 */
+    --primary:            263 70% 65%;   /* #a078f0  violet                     */
     --primary-foreground: 0 0% 100%;
 
-    --secondary:          240 5% 15%;
-    --secondary-foreground: 240 4% 62%;
+    --secondary:          232 13% 18%;
+    --secondary-foreground: 228 12% 58%;
 
-    --muted:              240 5% 14%;
-    --muted-foreground:   240 4% 46%;    /* #71717a  zinc-500                   */
+    --muted:              232 13% 17%;
+    --muted-foreground:   228 10% 42%;   /* dim blue-grey                       */
 
-    --accent:             263 70% 70% / 0.08;
+    --accent:             263 60% 60% / 0.1;
     --accent-foreground:  263 70% 80%;
 
     --destructive:        0 65% 52%;
     --destructive-foreground: 0 0% 100%;
 
-    --border:             240 4% 16%;    /* #27272a  zinc-800                   */
-    --input:              240 5% 12%;
-    --ring:               263 70% 70%;
-    --radius:             0.35rem;
+    --border:             232 14% 19%;   /* #21233a  subtle navy border         */
+    --input:              232 14% 14%;
+    --ring:               263 65% 65%;
+    --radius:             0.4rem;
 
     /* Sidebar */
-    --sidebar-bg:         240 7% 7%;     /* #0f0f11  darkest                    */
-    --sidebar-border:     240 4% 13%;
+    --sidebar-bg:         232 18% 8%;    /* #0e1019  darkest panel              */
+    --sidebar-border:     232 14% 16%;
   }
 }
 
@@ -55,53 +55,53 @@
 @layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: hsl(240 4% 18%) transparent;
+    scrollbar-color: hsl(232 14% 22%) transparent;
   }
-  .scrollbar-thin::-webkit-scrollbar { width: 4px; height: 4px; }
+  .scrollbar-thin::-webkit-scrollbar { width: 3px; height: 3px; }
   .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: hsl(240 4% 20%);
+    background: hsl(232 14% 24%);
     border-radius: 9999px;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: #7c3aed; }
 }
 
-/* ── Sidebar nav active — purple left bar ────────────────────────────────── */
+/* ── Sidebar nav active — violet left bar ────────────────────────────────── */
 .nav-active {
-  background: rgba(139, 92, 246, 0.1);
-  border-left: 2px solid #8b5cf6;
+  background: rgba(124, 58, 237, 0.13);
+  border-left: 2px solid #7c3aed;
   color: #c4b5fd !important;
 }
 .nav-active svg { color: #a78bfa !important; }
 
-/* ── Hover: light purple tint ────────────────────────────────────────────── */
+/* ── Hover ───────────────────────────────────────────────────────────────── */
 .nav-hover:hover {
-  background: rgba(139, 92, 246, 0.06);
-  color: #e4e4e7;
+  background: rgba(124, 58, 237, 0.07);
+  color: #cdd0e0;
 }
 
 /* ── SPL search bar ──────────────────────────────────────────────────────── */
 .spl-search {
-  background: hsl(240 7% 6%);
-  border: 1px solid hsl(240 4% 16%);
+  background: hsl(232 16% 8%);
+  border: 1px solid hsl(232 14% 19%);
   border-radius: 4px;
   font-family: "JetBrains Mono", "Fira Code", "Courier New", monospace;
 }
 .spl-search:focus-within {
   border-color: #7c3aed;
-  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.18);
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2);
 }
 
 /* ── Panel header ────────────────────────────────────────────────────────── */
 .spl-panel-hdr {
-  background: hsl(240 6% 9%);
-  border-bottom: 1px solid hsl(240 4% 16%);
+  background: hsl(232 15% 10%);
+  border-bottom: 1px solid hsl(232 14% 19%);
   padding: 8px 14px;
   font-size: 10px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: hsl(240 4% 44%);
+  color: hsl(228 10% 40%);
 }
 
 /* ── Severity chips ──────────────────────────────────────────────────────── */

@@ -77,25 +77,37 @@ export function Sidebar() {
         borderColor: "hsl(var(--sidebar-border, 240 4% 13%))",
       }}
     >
-      {/* ── Logo ── */}
+      {/* ── Logo (traffic-light zone: 78 px left padding) ── */}
       <div
-        className="flex h-[52px] shrink-0 items-center gap-3 border-b px-3"
-        style={{ borderColor: "hsl(var(--sidebar-border, 240 4% 13%))" }}
+        className="flex h-[52px] shrink-0 items-center gap-2.5 border-b"
+        style={{
+          borderColor: "hsl(var(--sidebar-border))",
+          paddingLeft: collapsed ? "14px" : "78px",
+          paddingRight: "10px",
+          // macOS: make this bar draggable so the window can be moved
+          WebkitAppRegion: "drag",
+        } as React.CSSProperties}
       >
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm overflow-hidden">
-          <Image src="/logo.png" alt="Netindavoid" width={32} height={32} priority />
-        </div>
-        {!collapsed && (
-          <div className="min-w-0">
-            <p className="text-[13px] font-bold text-white leading-none tracking-tight truncate">
-              Netindavoid
-            </p>
-            <p className="text-[9px] mt-0.5 font-semibold uppercase tracking-widest"
-               style={{ color: "#7c3aed" }}>
-              Security
-            </p>
+        {/* content must be no-drag so clicks still work */}
+        <div
+          className="flex items-center gap-2.5 min-w-0"
+          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+        >
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] overflow-hidden">
+            <Image src="/logo.png" alt="Netindavoid" width={28} height={28} priority />
           </div>
-        )}
+          {!collapsed && (
+            <div className="min-w-0">
+              <p className="text-[12px] font-bold text-white leading-none tracking-tight truncate">
+                Netindavoid
+              </p>
+              <p className="text-[9px] mt-0.5 font-semibold uppercase tracking-[0.12em]"
+                 style={{ color: "#7c3aed" }}>
+                Security
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Navigation ── */}
@@ -104,12 +116,12 @@ export function Sidebar() {
           <div key={gi} className={gi > 0 ? "mt-4" : ""}>
             {group.section && !collapsed && (
               <p className="mb-1 mt-1 px-2 text-[9px] font-bold uppercase tracking-widest"
-                 style={{ color: "hsl(240 4% 32%)" }}>
+                 style={{ color: "hsl(228 10% 30%)" }}>
                 {group.section}
               </p>
             )}
             {group.section && !collapsed && (
-              <div className="mb-1.5 mx-2 border-t" style={{ borderColor: "hsl(240 4% 14%)" }} />
+              <div className="mb-1.5 mx-2 border-t" style={{ borderColor: "hsl(232 14% 16%)" }} />
             )}
 
             {group.items.map(({ href, label, icon: Icon, badge }: any) => {
@@ -121,16 +133,16 @@ export function Sidebar() {
                   href={href}
                   title={collapsed ? label : undefined}
                   className={cn(
-                    "group relative flex items-center gap-2.5 rounded-sm px-2 py-[7px] text-[12px] font-medium transition-all",
+                    "group relative flex items-center gap-2.5 rounded-sm px-2 py-[7px] text-[12px] font-medium transition-colors duration-100",
                     active
                       ? "nav-active"
-                      : "nav-hover text-[hsl(240_4%_50%)] hover:text-white",
+                      : "nav-hover text-[hsl(228_10%_42%)] hover:text-[#cdd0e0]",
                   )}
                 >
                   <Icon
                     className={cn(
                       "h-3.5 w-3.5 shrink-0 transition-colors",
-                      active ? "text-[#a78bfa]" : "text-[hsl(240_4%_38%)] group-hover:text-[#c4b5fd]",
+                      active ? "text-[#a78bfa]" : "text-[hsl(228_10%_32%)] group-hover:text-[#c4b5fd]",
                     )}
                   />
                   {!collapsed && (
@@ -159,11 +171,11 @@ export function Sidebar() {
         <Link
           href="/settings"
           className={cn(
-            "group flex items-center gap-2.5 rounded-sm px-2 py-[7px] text-[12px] font-medium transition-all",
-            isActive("/settings") ? "nav-active" : "nav-hover text-[hsl(240_4%_46%)] hover:text-white",
+            "group flex items-center gap-2.5 rounded-sm px-2 py-[7px] text-[12px] font-medium transition-colors duration-100",
+            isActive("/settings") ? "nav-active" : "nav-hover text-[hsl(228_10%_42%)] hover:text-[#cdd0e0]",
           )}
         >
-          <Settings className={cn("h-3.5 w-3.5 shrink-0", isActive("/settings") ? "text-[#a78bfa]" : "text-[hsl(240_4%_36%)] group-hover:text-[#c4b5fd]")} />
+          <Settings className={cn("h-3.5 w-3.5 shrink-0", isActive("/settings") ? "text-[#a78bfa]" : "text-[hsl(228_10%_30%)] group-hover:text-[#c4b5fd]")} />
           {!collapsed && <span>Settings</span>}
         </Link>
       </div>

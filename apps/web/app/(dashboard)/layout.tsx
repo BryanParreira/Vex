@@ -2,6 +2,7 @@
 import { useAlertsStore } from "@/store/alerts";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { NavProgress } from "@/components/layout/NavProgress";
 import toast from "react-hot-toast";
 
 function AlertWatcher() {
@@ -29,6 +30,7 @@ function AlertWatcher() {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      <NavProgress />
       <Sidebar />
       <AlertWatcher />
       <main className="flex flex-1 flex-col overflow-hidden">
