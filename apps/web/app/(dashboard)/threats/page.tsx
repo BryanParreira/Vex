@@ -113,7 +113,7 @@ export default function ThreatsPage() {
                       <div className="flex items-center gap-2">
                         <p className="truncate text-sm font-medium text-foreground">{a.title}</p>
                         <Link
-                          href={`/threats/${a.id}`}
+                          href={`/threats/detail?id=${a.id}`}
                           onClick={(e) => e.stopPropagation()}
                           className="invisible ml-auto shrink-0 flex items-center gap-0.5 text-[11px] text-brand-500 dark:text-brand-400 hover:underline group-hover:visible"
                         >

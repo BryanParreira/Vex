@@ -1,5 +1,6 @@
 "use client";
-import { use } from "react";
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { api } from "@/lib/api";
 import { useRouter } from "next/navigation";
@@ -39,10 +40,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-export function ThreatDetailClient({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const router  = useRouter();
-  const { data: alert, mutate, isLoading } = useSWR(`/alerts/${id}`, fetcher);
+function ThreatDetail() {
+  const searchParams = useSearchParams();
+  const id = searchParams.get("id") ?? "";
+  const router = useRouter();
+  const { data: alert, mutate, isLoading } = useSWR(id ? `/alerts/${id}` : null, fetcher);
 
   const ack = async () => {
     await api.post(`/alerts/${id}/acknowledge`, {});
@@ -55,6 +57,19 @@ export function ThreatDetailClient({ params }: { params: Promise<{ id: string }>
     mutate();
     toast.success("Alert resolved");
   };
+
+  if (!id) {
+    return (
+      <div className="flex flex-col overflow-hidden">
+        <TopBar title="Threat Detail" />
+        <div className="flex h-64 flex-col items-center justify-center gap-3">
+          <Shield className="h-10 w-10 text-muted-foreground/20" />
+          <p className="text-sm text-muted-foreground">No alert selected.</p>
+          <Link href="/threats" className="text-xs text-brand-500 hover:underline">← Back to Threats</Link>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -209,7 +224,7 @@ export function ThreatDetailClient({ params }: { params: Promise<{ id: string }>
               {device && (
                 <Section title="Affected Device">
                   <Link
-                    href={`/devices`}
+                    href="/devices"
                     className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 hover:border-brand-500/40 transition-colors"
                   >
                     <DeviceIcon category={device.category} size="md" />
@@ -251,5 +266,22 @@ export function ThreatDetailClient({ params }: { params: Promise<{ id: string }>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ThreatDetailPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex flex-col overflow-hidden">
+        <TopBar title="Loading…" />
+        <div className="flex-1 p-5 space-y-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-12 w-full animate-pulse rounded-xl bg-muted" />
+          ))}
+        </div>
+      </div>
+    }>
+      <ThreatDetail />
+    </Suspense>
   );
 }
