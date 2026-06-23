@@ -81,27 +81,20 @@ function MonitorRow({ m }: { m: any }) {
       </div>
 
       {/* Response time */}
-      <div className="w-16 shrink-0 text-right">
-        {m.avg_ms != null ? (
+      <div className="w-20 shrink-0 text-right">
+        {m.latency_ms != null ? (
           <div className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
             <Clock className="h-3 w-3" />
-            <span className="font-mono">{m.avg_ms}ms</span>
+            <span className="font-mono">{m.latency_ms}ms</span>
           </div>
         ) : (
-          <span className="text-xs text-red-500/70 font-mono">—</span>
+          <span className="text-xs text-red-500/70 font-mono">timeout</span>
         )}
       </div>
 
       {/* Uptime */}
       <div className="w-20 shrink-0 text-right">
-        <UptimeBadge pct={m.uptime} />
-      </div>
-
-      {/* Type chip */}
-      <div className="w-12 shrink-0 text-right">
-        <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/60 bg-muted px-1.5 py-0.5 rounded">
-          {m.type}
-        </span>
+        <UptimeBadge pct={m.uptime_pct ?? 0} />
       </div>
     </div>
   );
@@ -113,7 +106,7 @@ export default function UptimePage() {
 
   const total  = monitors?.length ?? 0;
   const up     = monitors?.filter((m: any) => m.status === "up").length ?? 0;
-  const avgPct = monitors ? (monitors.reduce((a: number, m: any) => a + m.uptime, 0) / monitors.length).toFixed(2) : "—";
+  const avgPct = monitors?.length ? (monitors.reduce((a: number, m: any) => a + (m.uptime_pct ?? 0), 0) / monitors.length).toFixed(1) : "—";
 
   const groups: Record<string, any[]> = {};
   if (monitors) {
@@ -142,7 +135,7 @@ export default function UptimePage() {
           {[
             { label: "Monitors Up",   value: `${up} / ${total}`,  color: up === total ? "text-emerald-500" : "text-yellow-500" },
             { label: "Avg Uptime",    value: `${avgPct}%`,          color: "text-foreground" },
-            { label: "Incidents Today", value: monitors ? String(monitors.filter((m: any) => m.uptime < 99).length) : "—", color: "text-muted-foreground" },
+            { label: "Incidents Today", value: monitors ? String(monitors.filter((m: any) => (m.uptime_pct ?? 100) < 99).length) : "—", color: "text-muted-foreground" },
           ].map((s) => (
             <div key={s.label} className="rounded-xl border border-border bg-card p-4">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{s.label}</p>
