@@ -6,8 +6,8 @@ import { cn } from "@/lib/utils";
 import { useAlertsStore } from "@/store/alerts";
 import Image from "next/image";
 import {
-  Search, LayoutDashboard, Bell, FileText, Database,
-  Shield, Globe, Wifi, ScanSearch, BotMessageSquare,
+  Search, BarChart3, Home,
+  Bell, Globe, Wifi, ScanSearch, BotMessageSquare,
   Monitor, Activity, Map, CheckCircle2, Network,
   ScanLine, Aperture, ShieldAlert, Settings,
   ChevronLeft, ChevronRight, Radar,
@@ -17,17 +17,15 @@ const NAV = [
   {
     section: null,
     items: [
-      { href: "/logs",       label: "Search & Reporting", icon: Search          },
-      { href: "/dashboards", label: "Dashboards",         icon: LayoutDashboard },
-      { href: "/threats",    label: "Alerts",             icon: Bell, badge: true },
-      { href: "/reports",    label: "Reports",            icon: FileText        },
-      { href: "/",           label: "Overview",           icon: Database        },
+      { href: "/",           label: "Overview",       icon: Home            },
+      { href: "/logs",       label: "Log Search",     icon: Search          },
+      { href: "/dashboards", label: "Log Analytics",  icon: BarChart3       },
     ],
   },
   {
     section: "Security",
     items: [
-      { href: "/threats", label: "Threats",       icon: Shield,          badge: true },
+      { href: "/threats", label: "Alerts",        icon: Bell,            badge: true },
       { href: "/dns",     label: "DNS Monitor",   icon: Globe                        },
       { href: "/wifi",    label: "WiFi Intel",    icon: Radar                        },
       { href: "/audit",   label: "Audit Scanner", icon: ScanSearch                   },

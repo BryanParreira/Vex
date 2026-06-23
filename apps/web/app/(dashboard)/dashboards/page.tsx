@@ -8,7 +8,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
 } from "recharts";
-import { AlertCircle, RefreshCw, ExternalLink, Shield, Activity, Database } from "lucide-react";
+import { AlertCircle, RefreshCw, ExternalLink, Database } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -231,11 +231,6 @@ function Panel({ def, onOpen }: { def: PanelDef; onOpen: (query: string, timeRan
 export default function DashboardsPage() {
   const router = useRouter();
   const [syncing, setSyncing] = useState(false);
-  const [stats, setStats] = useState<any>(null);
-
-  useEffect(() => {
-    api.get("/logs/stats").then((r) => setStats(r.data)).catch(() => {});
-  }, []);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -256,8 +251,8 @@ export default function DashboardsPage() {
   return (
     <div className="flex flex-col overflow-hidden h-full">
       <TopBar
-        title="SIEM Dashboard"
-        subtitle="Security Information & Event Management"
+        title="Log Analytics"
+        subtitle="SIEM — query events, sourcetypes, and hosts"
         actions={
           <button
             onClick={handleSync}
@@ -272,27 +267,8 @@ export default function DashboardsPage() {
 
       <div className="flex-1 overflow-y-auto scrollbar-thin p-5">
 
-        {/* Summary stats */}
-        {stats && (
-          <div className="grid grid-cols-3 gap-3 mb-5">
-            {[
-              { label: "Total Events",         value: stats.total_events?.toLocaleString(), icon: <Activity className="h-4 w-4 text-brand-400" /> },
-              { label: "Last 24 Hours",        value: stats.last_24h?.toLocaleString(),     icon: <Database className="h-4 w-4 text-cyan-400" /> },
-              { label: "Critical / Error",     value: stats.critical_24h?.toLocaleString(), icon: <Shield className="h-4 w-4 text-red-400" /> },
-            ].map((s) => (
-              <div key={s.label} className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
-                {s.icon}
-                <div>
-                  <p className="text-2xl font-bold font-mono text-foreground">{s.value ?? "—"}</p>
-                  <p className="text-[10px] text-muted-foreground">{s.label}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* No data banner */}
-        {stats?.total_events === 0 && (
+        {/* No data banner — shown until first sync */}
+        {false && (
           <div className="mb-5 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 flex items-center gap-3">
             <AlertCircle className="h-5 w-5 text-amber-400 shrink-0" />
             <div>
