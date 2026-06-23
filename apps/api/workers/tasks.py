@@ -215,44 +215,87 @@ def run_periodic_scan():
 
 async def _periodic_scan_async():
     from core.database import AsyncSessionLocal
+    from core.redis import get_redis
     from models.tenant import Tenant
     from models.scan import Scan, ScanType, ScanStatus
     from models.device import Device, DeviceStatus, DeviceEvent
-    from sqlalchemy import select
+    from services.network import get_gateway, get_subnet_cidr
+    from sqlalchemy import select, update as sa_update
+    import redis.asyncio as aioredis
+    from core.config import settings
 
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(select(Tenant).where(Tenant.is_active == True))
-        tenants = result.scalars().all()
-        for tenant in tenants:
-            scan = Scan(
-                tenant_id=tenant.id,
-                scan_type=ScanType.ARP,
-                status=ScanStatus.PENDING,
-            )
-            db.add(scan)
-            await db.flush()
-            run_network_scan.delay(str(scan.id), str(tenant.id), "arp")
+    # Detect current network via gateway IP
+    current_gateway = get_gateway() or ""
+    current_cidr    = get_subnet_cidr()
 
-            # Mark devices not seen in last 5 minutes as OFFLINE
-            from datetime import timedelta
-            cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
-            stale = await db.execute(
-                select(Device).where(
-                    Device.tenant_id == tenant.id,
-                    Device.status == DeviceStatus.ONLINE,
-                    Device.last_seen_at < cutoff,
-                )
-            )
-            for dev in stale.scalars().all():
-                dev.status = DeviceStatus.OFFLINE
-                now = datetime.now(timezone.utc)
-                db.add(DeviceEvent(
+    r = aioredis.from_url(settings.REDIS_URL, encoding="utf-8", decode_responses=True)
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(Tenant).where(Tenant.is_active == True))
+            tenants = result.scalars().all()
+            for tenant in tenants:
+                tid = str(tenant.id)
+                gw_key = f"network:gateway:{tid}"
+                prev_gateway = await r.get(gw_key)
+
+                if prev_gateway and prev_gateway != current_gateway:
+                    # Network changed — immediately mark ALL online devices offline
+                    logger.info("Network changed — marking all devices offline",
+                                old_gw=prev_gateway, new_gw=current_gateway, cidr=current_cidr)
+                    stale_all = await db.execute(
+                        select(Device).where(
+                            Device.tenant_id == tenant.id,
+                            Device.status == DeviceStatus.ONLINE,
+                        )
+                    )
+                    now = datetime.now(timezone.utc)
+                    for dev in stale_all.scalars().all():
+                        dev.status = DeviceStatus.OFFLINE
+                        db.add(DeviceEvent(
+                            tenant_id=tenant.id,
+                            device_id=dev.id,
+                            event_type="offline",
+                            occurred_at=now,
+                        ))
+                    # Clear DNS dedup cache so new network gets fresh PTR scans
+                    await r.delete(f"dns:seen:{tid}")
+                    # Reset traffic cursor so first sample doesn't produce huge delta
+                    await r.delete(f"traffic:prev:{tid}")
+                    await r.delete(f"traffic:cursor:{tid}")
+
+                await r.set(gw_key, current_gateway, ex=7200)
+
+                scan = Scan(
                     tenant_id=tenant.id,
-                    device_id=dev.id,
-                    event_type="offline",
-                    occurred_at=now,
-                ))
-        await db.commit()
+                    scan_type=ScanType.ARP,
+                    status=ScanStatus.PENDING,
+                )
+                db.add(scan)
+                await db.flush()
+                run_network_scan.delay(str(scan.id), tid, "arp")
+
+                # Mark devices not seen in last 5 minutes as OFFLINE
+                from datetime import timedelta
+                cutoff = datetime.now(timezone.utc) - timedelta(minutes=5)
+                stale = await db.execute(
+                    select(Device).where(
+                        Device.tenant_id == tenant.id,
+                        Device.status == DeviceStatus.ONLINE,
+                        Device.last_seen_at < cutoff,
+                    )
+                )
+                for dev in stale.scalars().all():
+                    dev.status = DeviceStatus.OFFLINE
+                    now = datetime.now(timezone.utc)
+                    db.add(DeviceEvent(
+                        tenant_id=tenant.id,
+                        device_id=dev.id,
+                        event_type="offline",
+                        occurred_at=now,
+                    ))
+            await db.commit()
+    finally:
+        await r.aclose()
 
 
 @celery_app.task(name="workers.tasks.ingest_suricata_events")

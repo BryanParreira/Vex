@@ -44,15 +44,19 @@ def _netstat_bytes(iface: str | None = None) -> tuple[int, int]:
 async def collect_traffic(tenant_id: str, redis_client) -> Optional[dict]:
     """
     Read interface counters, compute delta since last sample, store in DB.
+    Tags each sample with the current subnet CIDR so historical data from
+    other networks is excluded when querying.
     Returns the stored traffic row dict or None if no change.
     """
     from core.database import AsyncSessionLocal
     from models.traffic import TrafficSample
+    from services.network import get_subnet_cidr
 
     bytes_in, bytes_out = _netstat_bytes()
     if bytes_in == 0 and bytes_out == 0:
         return None
 
+    current_cidr = get_subnet_cidr()
     now = datetime.now(timezone.utc)
     cursor_key = f"traffic:cursor:{tenant_id}"
 
@@ -60,11 +64,16 @@ async def collect_traffic(tenant_id: str, redis_client) -> Optional[dict]:
     prev = json.loads(prev_raw) if prev_raw else None
 
     await redis_client.set(cursor_key, json.dumps({
-        "bytes_in": bytes_in, "bytes_out": bytes_out, "ts": now.isoformat()
+        "bytes_in": bytes_in, "bytes_out": bytes_out,
+        "ts": now.isoformat(), "cidr": current_cidr,
     }), ex=3600)
 
     if not prev:
         return None  # first run — no delta yet
+
+    # If subnet changed since last cursor, skip this sample (network switch)
+    if prev.get("cidr") and prev["cidr"] != current_cidr:
+        return None
 
     delta_in  = max(bytes_in  - prev["bytes_in"],  0)
     delta_out = max(bytes_out - prev["bytes_out"], 0)
@@ -83,6 +92,7 @@ async def collect_traffic(tenant_id: str, redis_client) -> Optional[dict]:
             bytes_out=delta_out,
             packets_in=0,
             packets_out=0,
+            interface=current_cidr,
         )
         db.add(sample)
         await db.commit()

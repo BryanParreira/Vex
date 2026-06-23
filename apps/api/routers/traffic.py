@@ -49,37 +49,42 @@ async def _collect_netstat_sample(tenant_id: str):
     if not best or best_total == 0:
         return
 
-    _, ibytes, obytes = best
+    iface, ibytes, obytes = best
 
     # Store in Redis as last-seen to compute delta on next call
-    redis = None
     from core.redis import get_redis
+    from services.network import get_subnet_cidr
     redis = get_redis()
 
+    current_cidr = get_subnet_cidr()
     prev_key = f"traffic:prev:{tenant_id}"
     prev_raw = await redis.get(prev_key)
     now = datetime.now(timezone.utc)
 
     if prev_raw:
         prev = json.loads(prev_raw)
-        elapsed = max((now.timestamp() - prev["ts"]), 1)
-        delta_in  = max(ibytes - prev["ibytes"], 0)
-        delta_out = max(obytes - prev["obytes"], 0)
+        # If subnet changed since last sample, reset cursor (different network)
+        if prev.get("cidr") and prev["cidr"] != current_cidr:
+            await redis.delete(prev_key)
+        else:
+            delta_in  = max(ibytes - prev["ibytes"], 0)
+            delta_out = max(obytes - prev["obytes"], 0)
 
-        if delta_in > 0 or delta_out > 0:
-            from core.database import AsyncSessionLocal
-            async with AsyncSessionLocal() as db:
-                sample = TrafficSample(
-                    tenant_id=uuid.UUID(tenant_id),
-                    bytes_in=delta_in,
-                    bytes_out=delta_out,
-                    sampled_at=now,
-                )
-                db.add(sample)
-                await db.commit()
+            if delta_in > 0 or delta_out > 0:
+                from core.database import AsyncSessionLocal
+                async with AsyncSessionLocal() as db:
+                    sample = TrafficSample(
+                        tenant_id=uuid.UUID(tenant_id),
+                        bytes_in=delta_in,
+                        bytes_out=delta_out,
+                        sampled_at=now,
+                        interface=current_cidr,
+                    )
+                    db.add(sample)
+                    await db.commit()
 
     await redis.setex(prev_key, 300, json.dumps({
-        "ts": now.timestamp(), "ibytes": ibytes, "obytes": obytes,
+        "ts": now.timestamp(), "ibytes": ibytes, "obytes": obytes, "cidr": current_cidr,
     }))
 
 
@@ -89,29 +94,34 @@ async def traffic_overview(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    from services.network import get_subnet_cidr
+    current_cidr = get_subnet_cidr()
     since = datetime.now(timezone.utc) - timedelta(hours=hours)
 
+    # Only include samples tagged with the current subnet (or untagged legacy rows)
+    subnet_filter = "AND (interface = :cidr OR interface IS NULL)"
+
     # Aggregate totals
-    agg = await db.execute(text("""
+    agg = await db.execute(text(f"""
         SELECT
             COALESCE(SUM(bytes_in), 0) as total_in,
             COALESCE(SUM(bytes_out), 0) as total_out,
             COALESCE(MAX(bytes_in / 60.0 * 8 / 1e6), 0) as peak_mbps_in,
             COALESCE(MAX(bytes_out / 60.0 * 8 / 1e6), 0) as peak_mbps_out
         FROM traffic_samples
-        WHERE tenant_id = :tenant_id AND sampled_at >= :since
-    """), {"tenant_id": str(user.tenant_id), "since": since})
+        WHERE tenant_id = :tenant_id AND sampled_at >= :since {subnet_filter}
+    """), {"tenant_id": str(user.tenant_id), "since": since, "cidr": current_cidr})
     row = agg.fetchone()
 
     # Current (last 5 min)
     last_5 = datetime.now(timezone.utc) - timedelta(minutes=5)
-    cur = await db.execute(text("""
+    cur = await db.execute(text(f"""
         SELECT
             COALESCE(SUM(bytes_in) / 300.0 * 8 / 1e6, 0) as cur_in,
             COALESCE(SUM(bytes_out) / 300.0 * 8 / 1e6, 0) as cur_out
         FROM traffic_samples
-        WHERE tenant_id = :tenant_id AND sampled_at >= :since
-    """), {"tenant_id": str(user.tenant_id), "since": last_5})
+        WHERE tenant_id = :tenant_id AND sampled_at >= :since {subnet_filter}
+    """), {"tenant_id": str(user.tenant_id), "since": last_5, "cidr": current_cidr})
     cur_row = cur.fetchone()
 
     summary = BandwidthSummary(
@@ -137,10 +147,11 @@ async def traffic_overview(
         LEFT JOIN devices d ON ts.device_id = d.id
         WHERE ts.tenant_id = :tenant_id AND ts.sampled_at >= :since
           AND ts.device_id IS NOT NULL
+          AND (ts.interface = :cidr OR ts.interface IS NULL)
         GROUP BY ts.device_id, d.display_name, d.hostname, d.mac_address
         ORDER BY total DESC
         LIMIT 10
-    """), {"tenant_id": str(user.tenant_id), "since": since})
+    """), {"tenant_id": str(user.tenant_id), "since": since, "cidr": current_cidr})
 
     total_traffic = int(row[0]) + int(row[1]) or 1
     talkers = []
@@ -163,10 +174,10 @@ async def traffic_overview(
             SUM(bytes_in) as bytes_in,
             SUM(bytes_out) as bytes_out
         FROM traffic_samples
-        WHERE tenant_id = :tenant_id AND sampled_at >= :since
+        WHERE tenant_id = :tenant_id AND sampled_at >= :since {subnet_filter}
         GROUP BY bucket
         ORDER BY bucket ASC
-    """), {"tenant_id": str(user.tenant_id), "since": since})
+    """), {"tenant_id": str(user.tenant_id), "since": since, "cidr": current_cidr})
 
     timeseries = [TrafficPoint(ts=r[0], bytes_in=int(r[1]), bytes_out=int(r[2])) for r in ts_result.fetchall()]
 
