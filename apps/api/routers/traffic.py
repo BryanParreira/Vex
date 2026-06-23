@@ -78,7 +78,6 @@ async def _collect_netstat_sample(tenant_id: str):
                 db.add(sample)
                 await db.commit()
 
-    import json
     await redis.setex(prev_key, 300, json.dumps({
         "ts": now.timestamp(), "ibytes": ibytes, "obytes": obytes,
     }))
