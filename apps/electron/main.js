@@ -200,9 +200,13 @@ function createMainWindow() {
 
 // ── Tray ──────────────────────────────────────────────────────────────────────
 function createTray() {
-  const img = nativeImage.createFromPath(path.join(__dirname, 'build', 'icon.icns'))
-  const trayIcon = img.resize({ width: 18, height: 18 })
-  tray = new Tray(trayIcon)
+  // Use a dedicated 22×22 template PNG for the macOS menu bar.
+  // Template images are pure black + alpha — macOS inverts them automatically
+  // for dark/light mode so the icon is always visible.
+  const trayPng = path.join(__dirname, 'build', 'tray-icon.png')
+  const img = nativeImage.createFromPath(trayPng)
+  img.setTemplateImage(true)   // tells macOS to auto-invert for dark/light menubar
+  tray = new Tray(img)
   tray.setToolTip('Vex')
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Open Vex', click: () => { mainWindow?.show() } },
