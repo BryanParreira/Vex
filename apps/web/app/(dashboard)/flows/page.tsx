@@ -35,14 +35,6 @@ const RISK_META: Record<string, { label: string; color: string }> = {
   brute_force: { label: "Brute Force", color: "text-orange-400 bg-orange-500/10 border-orange-500/20" },
 };
 
-function parseLocal(local: string): { ip: string; port: string } {
-  const parts = local.rsplit ? local.rsplit(".", 1) : local.split(".");
-  const port = parts[parts.length - 1];
-  const ip   = parts.slice(0, -1).join(".");
-  return { ip, port };
-}
-
-// Can't use Python's rsplit in JS — reimplement
 function splitLocal(local: string) {
   const idx = local.lastIndexOf(".");
   if (idx === -1) return { ip: local, port: "" };
