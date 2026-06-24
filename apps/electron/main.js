@@ -57,59 +57,70 @@ const API_DIR   = path.join(PROJECT_ROOT, 'apps', 'api')
 const UVICORN   = path.join(VENV_BIN, 'uvicorn')
 const PIP       = path.join(VENV_BIN, 'pip')
 
-// Auto-setup: write a .command file and open it in Terminal.app.
-// Returns a Promise that resolves once the user confirms setup is done,
-// or rejects with instructions if we can't open Terminal.
+// Auto-setup: open a Terminal window to run the venv setup, then poll until done.
+// shell.openPath uses LaunchServices IPC (not subprocess spawn), so it works
+// even when hardened runtime blocks direct spawning of external binaries.
 function setupVenv(loadingWin) {
   return new Promise((resolve, reject) => {
     const scriptPath = path.join(os.tmpdir(), 'vex-setup.command')
+    const donePath   = path.join(os.tmpdir(), 'vex-setup-done')
+
+    // Remove any stale done-marker from a previous run
+    try { fs.unlinkSync(donePath) } catch (_) {}
+
     const script = [
       '#!/bin/bash',
       'set -e',
       `cd "${API_DIR}"`,
       'echo ""',
       'echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"',
-      'echo "  Vex — first-launch setup"',
+      'echo "  Vex — one-time setup (do not close)"',
       'echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"',
       'echo ""',
-      'echo "Step 1/2  Creating Python environment..."',
+      'echo "[1/2] Creating Python environment..."',
       'python3 -m venv .venv',
-      'echo "Step 2/2  Installing dependencies (1-2 min)..."',
+      'echo "[2/2] Installing dependencies (this takes 1-2 min)..."',
       '.venv/bin/pip install -r requirements.txt --quiet',
+      `touch "${donePath}"`,   // signal to Vex that setup finished
       'echo ""',
-      'echo "✓ Setup complete!"',
-      'echo "  You can close this window and relaunch Vex."',
-      'echo ""',
-      'read -p "Press Enter to close..."',
+      'echo "✓ Done! Vex is starting..."',
+      'sleep 3',               // let the user see the success message
     ].join('\n')
 
     try {
       fs.writeFileSync(scriptPath, script, { mode: 0o755 })
     } catch (e) {
       return reject(new Error(
-        'Could not write setup script.\n\n' +
-        'Run this in Terminal instead:\n\n' +
-        `cd "${API_DIR}"\n` +
-        'python3 -m venv .venv\n' +
-        '.venv/bin/pip install -r requirements.txt\n\n' +
-        'Then relaunch Vex.'
+        'Could not write setup script.\n\nRun manually in Terminal:\n\n' +
+        `cd "${API_DIR}"\npython3 -m venv .venv\n.venv/bin/pip install -r requirements.txt\n\nThen relaunch Vex.`
       ))
     }
 
-    // shell.openPath opens .command files in Terminal.app
-    shell.openPath(scriptPath).then((err) => {
-      if (err) {
+    shell.openPath(scriptPath).then((openErr) => {
+      if (openErr) {
         return reject(new Error(
-          'Could not open Terminal.\n\n' +
-          'Run this manually:\n\n' +
-          `cd "${API_DIR}"\n` +
-          'python3 -m venv .venv\n' +
-          '.venv/bin/pip install -r requirements.txt\n\n' +
-          'Then relaunch Vex.'
+          'Could not open Terminal for setup.\n\nRun manually:\n\n' +
+          `cd "${API_DIR}"\npython3 -m venv .venv\n.venv/bin/pip install -r requirements.txt\n\nThen relaunch Vex.`
         ))
       }
-      // Resolve with special sentinel — caller will show "relaunch" dialog and quit
-      resolve('needs-relaunch')
+
+      setStatus(loadingWin, 'Setting up Python environment (Terminal opened)…')
+
+      // Poll every 2 s for the done-marker; time out after 5 min
+      let elapsed = 0
+      const poll = setInterval(() => {
+        elapsed += 2000
+        if (fs.existsSync(donePath)) {
+          clearInterval(poll)
+          try { fs.unlinkSync(donePath) } catch (_) {}
+          resolve()
+        } else if (elapsed >= 300_000) {
+          clearInterval(poll)
+          reject(new Error(
+            'Setup timed out (5 min).\n\nCheck the Terminal window for errors, then relaunch Vex.'
+          ))
+        }
+      }, 2000)
     })
   })
 }
@@ -319,24 +330,11 @@ app.whenReady().then(async () => {
   if (!alreadyUp) {
     // Auto-setup Python venv on first launch (or after venv was deleted)
     if (!fs.existsSync(UVICORN)) {
-      let setupResult
       try {
-        setupResult = await setupVenv(loading)
+        await setupVenv(loading)
       } catch (err) {
         loading.close()
         dialog.showErrorBox('Setup failed', err.message)
-        app.quit()
-        return
-      }
-      if (setupResult === 'needs-relaunch') {
-        loading.close()
-        dialog.showMessageBoxSync({
-          type: 'info',
-          title: 'Setup running in Terminal',
-          message: 'Setup running in Terminal',
-          detail: 'A Terminal window just opened to install Vex dependencies.\n\nWhen it shows "✓ Setup complete!", close the Terminal and relaunch Vex.',
-          buttons: ['Quit Vex'],
-        })
         app.quit()
         return
       }
