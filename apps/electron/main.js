@@ -235,7 +235,6 @@ function createTray() {
   // for dark/light mode so the icon is always visible.
   const trayPng = path.join(__dirname, 'build', 'tray-icon.png')
   const img = nativeImage.createFromPath(trayPng)
-  img.setTemplateImage(true)   // tells macOS to auto-invert for dark/light menubar
   tray = new Tray(img)
   tray.setToolTip('Vex')
   tray.setContextMenu(Menu.buildFromTemplate([
