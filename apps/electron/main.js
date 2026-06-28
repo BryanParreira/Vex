@@ -9,13 +9,12 @@ const url = require('url')
 
 // ── Project root ──────────────────────────────────────────────────────────────
 const PROJECT_ROOT = process.env.VEX_DIR ||
-  path.join(os.homedir(), 'Desktop', 'netindavoid')
+  path.join(os.homedir(), 'Desktop', 'Vex')
 
-const NVM_NODE = path.join(os.homedir(), '.nvm', 'versions', 'node', 'v20.19.5', 'bin')
 const VENV_BIN = path.join(PROJECT_ROOT, 'apps', 'api', '.venv', 'bin')
 const ENV = {
   ...process.env,
-  PATH: `${VENV_BIN}:${NVM_NODE}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`,
+  PATH: `${VENV_BIN}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`,
   NODE_ENV: 'production',
 }
 
