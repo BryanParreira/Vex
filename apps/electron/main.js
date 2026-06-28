@@ -8,8 +8,43 @@ const fs = require('fs')
 const url = require('url')
 
 // ── Project root ──────────────────────────────────────────────────────────────
-const PROJECT_ROOT = process.env.VEX_DIR ||
-  path.join(os.homedir(), 'Desktop', 'Vex')
+// Resolution order:
+//   1. VEX_DIR env var (explicit override)
+//   2. Persisted path from last successful launch (stored in userData)
+//   3. Known default locations (Vex, netindavoid, vex on Desktop/home)
+//   4. Prompt user to pick the folder (first-launch / moved folder)
+
+const PERSIST_PATH = path.join(app.getPath('userData'), 'vex-project-root.txt')
+
+function _readPersistedRoot() {
+  try { return fs.readFileSync(PERSIST_PATH, 'utf8').trim() } catch { return null }
+}
+
+function _persistRoot(p) {
+  try { fs.writeFileSync(PERSIST_PATH, p) } catch {}
+}
+
+function _findProjectRoot() {
+  if (process.env.VEX_DIR) return process.env.VEX_DIR
+
+  const persisted = _readPersistedRoot()
+  if (persisted && fs.existsSync(path.join(persisted, 'apps', 'api', 'main.py'))) return persisted
+
+  const candidates = [
+    path.join(os.homedir(), 'Desktop', 'Vex'),
+    path.join(os.homedir(), 'Desktop', 'vex'),
+    path.join(os.homedir(), 'Desktop', 'netindavoid'),
+    path.join(os.homedir(), 'Vex'),
+    path.join(os.homedir(), 'vex'),
+    path.join(os.homedir(), 'netindavoid'),
+  ]
+  for (const c of candidates) {
+    if (fs.existsSync(path.join(c, 'apps', 'api', 'main.py'))) return c
+  }
+  return null  // caller must prompt
+}
+
+const PROJECT_ROOT = _findProjectRoot() || path.join(os.homedir(), 'Desktop', 'Vex')
 
 const VENV_BIN = path.join(PROJECT_ROOT, 'apps', 'api', '.venv', 'bin')
 const ENV = {
@@ -318,6 +353,37 @@ function isAPIAlreadyUp() {
 
 app.whenReady().then(async () => {
   registerAppProtocol()
+
+  // ── Validate project root before showing anything ────────────────────────
+  if (!fs.existsSync(path.join(PROJECT_ROOT, 'apps', 'api', 'main.py'))) {
+    const { response, filePaths } = await dialog.showOpenDialog({
+      title: 'Locate Vex project folder',
+      message: 'Vex could not find the backend source. Select the Vex project root folder (the one containing "apps/").',
+      buttonLabel: 'Select folder',
+      properties: ['openDirectory'],
+    })
+    if (response !== 0 || !filePaths?.length) {
+      app.quit()
+      return
+    }
+    const chosen = filePaths[0]
+    if (!fs.existsSync(path.join(chosen, 'apps', 'api', 'main.py'))) {
+      dialog.showErrorBox(
+        'Wrong folder',
+        `"${chosen}" does not look like a Vex project — apps/api/main.py not found.\n\nSelect the folder that contains the "apps" directory.`
+      )
+      app.quit()
+      return
+    }
+    _persistRoot(chosen)
+    // Restart with correct root — simpler than patching all derived constants at runtime
+    app.relaunch({ args: process.argv.slice(1), execPath: process.execPath, env: { ...process.env, VEX_DIR: chosen } })
+    app.quit()
+    return
+  }
+
+  // Root found — persist it so future launches skip the search
+  _persistRoot(PROJECT_ROOT)
 
   const loading = createLoadingWindow()
   await new Promise(r => setTimeout(r, 300))
