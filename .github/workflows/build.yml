@@ -20,13 +20,33 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Build web (static export — no Node server needed)
+      - name: Build web (static export)
         working-directory: apps/web
         run: |
           npm ci --legacy-peer-deps
-          # Remove mock API routes — static export cannot include API routes
           rm -rf app/api
           NEXT_BUILD_TARGET=electron npm run build
+
+      - name: Prepare Python runtimes (arm64 + x64)
+        run: |
+          PY_VERSION="3.12.7"
+          PY_BUILD="20241016"
+          REQ="apps/api/requirements.txt"
+          BASE_URL="https://github.com/indygreg/python-build-standalone/releases/download/${PY_BUILD}"
+
+          echo "▶ Building arm64 Python runtime..."
+          curl -fL "${BASE_URL}/cpython-${PY_VERSION}+${PY_BUILD}-aarch64-apple-darwin-install_only.tar.gz" \
+            | tar xz
+          mv python apps/electron/python-runtime-arm64
+          apps/electron/python-runtime-arm64/bin/pip3 install \
+            --no-cache-dir --quiet -r "$REQ"
+
+          echo "▶ Building x64 Python runtime (via Rosetta)..."
+          curl -fL "${BASE_URL}/cpython-${PY_VERSION}+${PY_BUILD}-x86_64-apple-darwin-install_only.tar.gz" \
+            | tar xz
+          mv python apps/electron/python-runtime-x64
+          arch -x86_64 apps/electron/python-runtime-x64/bin/pip3 install \
+            --no-cache-dir --quiet -r "$REQ"
 
       - name: Install Electron deps
         working-directory: apps/electron

@@ -158,8 +158,13 @@ async def _call_anthropic(cfg: AiConfig, question: str, context: Optional[dict])
 async def _fetch_live_context(tenant_id: str, db: AsyncSession) -> dict:
     """Pull a rich live snapshot of network state to ground the AI answer."""
     from sqlalchemy import text
+    from datetime import timedelta
     tid = str(tenant_id)
     ctx: dict = {}
+    now = datetime.now(timezone.utc)
+    since_24h = now - timedelta(hours=24)
+    since_5m  = now - timedelta(minutes=5)
+    since_1h  = now - timedelta(hours=1)
     try:
         # Devices
         r = await db.execute(text("""
@@ -192,42 +197,42 @@ async def _fetch_live_context(tenant_id: str, db: AsyncSession) -> dict:
         r3 = await db.execute(text("""
             SELECT severity, COUNT(*) FROM alerts
             WHERE tenant_id = :tid AND status = 'open'
-            AND triggered_at >= NOW() - INTERVAL '24 hours'
+            AND triggered_at >= :since
             GROUP BY severity ORDER BY severity
-        """), {"tid": tid})
+        """), {"tid": tid, "since": since_24h})
         ctx["open_alerts_by_severity"] = {row[0]: int(row[1]) for row in r3.fetchall()}
 
         # Recent critical/high alerts (titles)
         r4 = await db.execute(text("""
-            SELECT title, severity, category, triggered_at::text
+            SELECT title, severity, category, triggered_at
             FROM alerts
             WHERE tenant_id = :tid AND status = 'open'
             AND severity IN ('critical', 'high')
-            AND triggered_at >= NOW() - INTERVAL '24 hours'
+            AND triggered_at >= :since
             ORDER BY triggered_at DESC LIMIT 8
-        """), {"tid": tid})
+        """), {"tid": tid, "since": since_24h})
         ctx["recent_critical_alerts"] = [
-            {"title": row[0], "severity": row[1], "category": row[2], "when": row[3]}
+            {"title": row[0], "severity": row[1], "category": row[2], "when": str(row[3])}
             for row in r4.fetchall()
         ]
 
         # Malicious DNS (last 24h)
         r5 = await db.execute(text("""
             SELECT domain, COUNT(*) FROM dns_queries
-            WHERE tenant_id = :tid AND is_malicious = true
-            AND queried_at >= NOW() - INTERVAL '24 hours'
+            WHERE tenant_id = :tid AND is_malicious = 1
+            AND queried_at >= :since
             GROUP BY domain ORDER BY COUNT(*) DESC LIMIT 10
-        """), {"tid": tid})
+        """), {"tid": tid, "since": since_24h})
         ctx["malicious_dns_domains"] = [row[0] for row in r5.fetchall()]
 
         # Current bandwidth (last 5 min)
         r6 = await db.execute(text("""
             SELECT
-                COALESCE(SUM(bytes_in) / 300.0 * 8 / 1e6, 0),
-                COALESCE(SUM(bytes_out) / 300.0 * 8 / 1e6, 0)
+                COALESCE(SUM(bytes_in) / 300.0 * 8 / 1000000.0, 0),
+                COALESCE(SUM(bytes_out) / 300.0 * 8 / 1000000.0, 0)
             FROM traffic_samples
-            WHERE tenant_id = :tid AND sampled_at >= NOW() - INTERVAL '5 minutes'
-        """), {"tid": tid})
+            WHERE tenant_id = :tid AND sampled_at >= :since
+        """), {"tid": tid, "since": since_5m})
         bw = r6.fetchone()
         ctx["bandwidth_mbps"] = {
             "download": round(float(bw[0] or 0), 2),
@@ -240,11 +245,11 @@ async def _fetch_live_context(tenant_id: str, db: AsyncSession) -> dict:
                    SUM(ts.bytes_in + ts.bytes_out) AS total
             FROM traffic_samples ts
             LEFT JOIN devices d ON ts.device_id = d.id
-            WHERE ts.tenant_id = :tid AND ts.sampled_at >= NOW() - INTERVAL '1 hour'
+            WHERE ts.tenant_id = :tid AND ts.sampled_at >= :since
             AND ts.device_id IS NOT NULL
             GROUP BY d.display_name, d.hostname, d.ip_address
             ORDER BY total DESC LIMIT 5
-        """), {"tid": tid})
+        """), {"tid": tid, "since": since_1h})
         ctx["top_bandwidth_users"] = [
             {"name": row[0], "bytes": int(row[1])} for row in r7.fetchall()
         ]

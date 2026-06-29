@@ -4,7 +4,7 @@ from datetime import datetime
 
 from sqlalchemy import String, DateTime, Text, Index
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from core.types import UUID, JSONB
 
 from core.database import Base
 

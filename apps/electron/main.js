@@ -8,11 +8,6 @@ const fs = require('fs')
 const url = require('url')
 
 // ── Paths ─────────────────────────────────────────────────────────────────────
-//
-// Packaged app  →  API source is bundled into Resources/api-src (read-only).
-//                  venv + .env live in userData (writable, survives updates).
-//
-// Dev (npm start) → fall back to PROJECT_ROOT scanning so local dev still works.
 
 const USER_DATA = app.getPath('userData')
 
@@ -36,31 +31,22 @@ function _devProjectRoot() {
   return null
 }
 
-// API_SRC  = directory containing main.py (may be read-only when packaged)
-// VENV_DIR = directory where the venv lives (always writable)
-// DOT_ENV  = .env file written on first launch with localhost DB/Redis URLs
-const API_SRC  = app.isPackaged
+// Bundled Python runtime (inside app bundle on release, system python3 on dev)
+const PYTHON_HOME = app.isPackaged
+  ? path.join(process.resourcesPath, 'python-runtime')
+  : null
+
+const API_PYTHON = app.isPackaged
+  ? path.join(process.resourcesPath, 'python-runtime', 'bin', 'python3')
+  : 'python3'
+
+const API_SRC = app.isPackaged
   ? path.join(process.resourcesPath, 'api-src')
   : path.join(_devProjectRoot() || path.join(os.homedir(), 'Desktop', 'Vex'), 'apps', 'api')
 
-const VENV_DIR = path.join(USER_DATA, '.venv')
-const VENV_BIN = path.join(VENV_DIR, 'bin')
-const DOT_ENV  = path.join(USER_DATA, '.env')
-
-// Local DB/Redis URLs — written into DOT_ENV on first launch
-const LOCAL_DB_URL    = 'postgresql+asyncpg://localhost:5432/vex'
-const LOCAL_REDIS_URL = 'redis://localhost:6379/0'
-
-const ENV = {
-  ...process.env,
-  PATH: `${VENV_BIN}:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin`,
-  NODE_ENV:    'production',
-  // Override Docker-default URLs so the API talks to localhost services
-  DATABASE_URL:          LOCAL_DB_URL,
-  REDIS_URL:             LOCAL_REDIS_URL,
-  CELERY_BROKER_URL:     'redis://localhost:6379/1',
-  CELERY_RESULT_BACKEND: 'redis://localhost:6379/2',
-}
+// SQLite database lives in userData — persists across app updates
+const DB_PATH = path.join(USER_DATA, 'vex.db')
+const DB_URL  = `sqlite+aiosqlite:////${DB_PATH}`
 
 // Static web files
 const WEB_OUT = app.isPackaged
@@ -71,9 +57,9 @@ let mainWindow = null
 let tray = null
 let apiProc = null
 let isQuitting = false
+let apiLastError = ''
 
 // ── Register app:// scheme BEFORE app is ready ────────────────────────────────
-// Treat it like https:// — same-origin, fetch API, no mixed-content blocks
 protocol.registerSchemesAsPrivileged([{
   scheme: 'app',
   privileges: {
@@ -94,131 +80,26 @@ function setStatus(win, text) {
 }
 
 // ── API process ───────────────────────────────────────────────────────────────
-let apiLastError = ''
-
-const UVICORN = path.join(VENV_BIN, 'uvicorn')
-
-// Auto-setup: open a Terminal to create the venv + install deps + init DB.
-// Venv is created in userData (writable) not in API_SRC (may be read-only).
-function setupVenv(loadingWin) {
-  return new Promise((resolve, reject) => {
-    const scriptPath = path.join(os.tmpdir(), 'vex-setup.command')
-    const donePath   = path.join(os.tmpdir(), 'vex-setup-done')
-
-    try { fs.unlinkSync(donePath) } catch (_) {}
-
-    // Ensure userData dir exists so venv can be created there
-    try { fs.mkdirSync(USER_DATA, { recursive: true }) } catch (_) {}
-
-    const script = [
-      '#!/bin/bash',
-      'set -e',
-      'export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:$PATH"',
-      'echo ""',
-      'echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"',
-      'echo "  Vex — first-time setup  (do not close this window)"',
-      'echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"',
-      'echo ""',
-
-      // ── 1. Python venv ──────────────────────────────────────────────────────
-      // Prefer Python 3.11-3.13 — psycopg2-binary and other packages
-      // don't have pre-built wheels for 3.14+ yet, causing source builds to fail.
-      'echo "[1/4] Creating Python environment..."',
-      'PYTHON=""',
-      'for v in python3.13 python3.12 python3.11 python3.10; do',
-      '  if command -v "$v" &>/dev/null; then PYTHON="$v"; break; fi',
-      'done',
-      '[ -z "$PYTHON" ] && PYTHON=python3',
-      'echo "Using $($PYTHON --version)"',
-      `"$PYTHON" -m venv "${VENV_DIR}"`,
-      `"${VENV_BIN}/pip" install --upgrade pip --quiet`,
-      'echo "[2/4] Installing Python dependencies (1-3 min)..."',
-      `"${VENV_BIN}/pip" install --prefer-binary -r "${API_SRC}/requirements.txt" --quiet`,
-
-      // ── 2. PostgreSQL ───────────────────────────────────────────────────────
-      'echo "[3/4] Setting up database..."',
-      // Start PostgreSQL if installed via Homebrew
-      'if command -v brew &>/dev/null; then',
-      '  PG_VER=$(brew list --formula 2>/dev/null | grep -E "^postgresql@" | sort -V | tail -1)',
-      '  [ -n "$PG_VER" ] && brew services start "$PG_VER" &>/dev/null || true',
-      '  brew services start redis &>/dev/null || true',
-      'fi',
-      // Give services a moment to start
-      'sleep 3',
-      // Create database (idempotent — errors if it already exists, which is fine)
-      'createdb vex 2>/dev/null || true',
-      // Run Alembic migrations
-      `cd "${API_SRC}"`,
-      `DATABASE_URL="${LOCAL_DB_URL}" "${VENV_BIN}/alembic" upgrade head 2>&1 || true`,
-      // Bootstrap admin user + default tenant
-      `DATABASE_URL="${LOCAL_DB_URL}" REDIS_URL="redis://localhost:6379/0" python3 -c "
-import asyncio, sys
-sys.path.insert(0, '${API_SRC}')
-import os
-os.environ.setdefault('DATABASE_URL', '${LOCAL_DB_URL}')
-os.environ.setdefault('REDIS_URL', 'redis://localhost:6379/0')
-from scripts.bootstrap import bootstrap_admin
-asyncio.run(bootstrap_admin())
-" 2>&1 || true`,
-
-      // ── 3. Done ─────────────────────────────────────────────────────────────
-      'echo "[4/4] Done!"',
-      `touch "${donePath}"`,
-      'echo ""',
-      'echo "✓ Setup complete — Vex is starting..."',
-      'sleep 3',
-    ].join('\n')
-
-    try {
-      fs.writeFileSync(scriptPath, script, { mode: 0o755 })
-    } catch (e) {
-      return reject(new Error('Could not write setup script: ' + e.message))
-    }
-
-    shell.openPath(scriptPath).then((openErr) => {
-      if (openErr) {
-        return reject(new Error('Could not open Terminal for setup: ' + openErr))
-      }
-
-      setStatus(loadingWin, 'First-time setup running in Terminal…')
-
-      let elapsed = 0
-      const poll = setInterval(() => {
-        elapsed += 2000
-        if (fs.existsSync(donePath)) {
-          clearInterval(poll)
-          try { fs.unlinkSync(donePath) } catch (_) {}
-          resolve()
-        } else if (elapsed >= 600_000) {  // 10 min timeout for first install
-          clearInterval(poll)
-          reject(new Error('Setup timed out (10 min). Check Terminal for errors, then relaunch Vex.'))
-        }
-      }, 2000)
-    })
-  })
-}
-
-// Try to start PostgreSQL + Redis via Homebrew (silent — best-effort).
-function startDependencies() {
-  return new Promise((resolve) => {
-    const proc = spawn('bash', ['-c', `
-      export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$PATH"
-      if command -v brew &>/dev/null; then
-        PG=$(brew list --formula 2>/dev/null | grep -E "^postgresql@" | sort -V | tail -1)
-        [ -n "$PG" ] && brew services start "$PG" &>/dev/null || true
-        brew services start redis &>/dev/null || true
-      fi
-    `], { env: process.env })
-    proc.on('close', () => resolve())
-    setTimeout(resolve, 8000)  // don't wait forever
-  })
-}
-
 function startAPI() {
-  apiProc = spawn(UVICORN, ['main:app', '--host', '127.0.0.1', '--port', '8000'], {
-    cwd: API_SRC,
-    env: ENV,
-  })
+  // Ensure userData exists (SQLite db will be created here)
+  try { fs.mkdirSync(USER_DATA, { recursive: true }) } catch (_) {}
+
+  const env = {
+    ...process.env,
+    // Point Python to its bundled home so it finds stdlib + site-packages
+    ...(PYTHON_HOME ? { PYTHONHOME: PYTHON_HOME } : {}),
+    NODE_ENV:       'production',
+    DATABASE_URL:   DB_URL,
+    // Structured logging: plain output for Electron's console
+    PYTHONUNBUFFERED: '1',
+  }
+
+  apiProc = spawn(API_PYTHON, [
+    '-m', 'uvicorn', 'main:app',
+    '--host', '127.0.0.1',
+    '--port', '8000',
+    '--workers', '1',
+  ], { cwd: API_SRC, env })
 
   apiProc.stderr.on('data', (d) => {
     const line = d.toString().trim()
@@ -226,7 +107,6 @@ function startAPI() {
     if (line) apiLastError = line
   })
   apiProc.stdout.on('data', (d) => console.log('[API]', d.toString().trim()))
-
   apiProc.on('error', (e) => { apiLastError = e.message })
   apiProc.on('exit', (code) => {
     if (!isQuitting) console.warn('API exited with code', code)
@@ -240,14 +120,13 @@ function killAll() {
   if (apiProc) { try { apiProc.kill('SIGTERM') } catch (_) {} }
 }
 
-function waitForAPI(timeoutMs = 45000) {
+function waitForAPI(timeoutMs = 60000) {
   return new Promise((resolve, reject) => {
     const deadline = Date.now() + timeoutMs
 
-    // Fail immediately if API process dies
     if (apiProc) {
       apiProc.once('exit', (code) => {
-        if (!isQuitting) reject(new Error(`API exited (code ${code})\n\n${apiLastError}`))
+        if (!isQuitting) reject(new Error(`API process exited (code ${code})\n\n${apiLastError}`))
       })
     }
 
@@ -258,7 +137,11 @@ function waitForAPI(timeoutMs = 45000) {
         if (Date.now() > deadline) return reject(new Error(`API health check timed out.\n\n${apiLastError}`))
         setTimeout(check, 1500)
       }).on('error', () => {
-        if (Date.now() > deadline) return reject(new Error(`API did not start within ${timeoutMs / 1000}s.\n\nLast error: ${apiLastError || 'none'}\n\nMake sure PostgreSQL and Redis are running.`))
+        if (Date.now() > deadline) {
+          return reject(new Error(
+            `API did not start within ${timeoutMs / 1000}s.\n\nLast error: ${apiLastError || 'none'}`
+          ))
+        }
         setTimeout(check, 1500)
       })
     }
@@ -267,33 +150,25 @@ function waitForAPI(timeoutMs = 45000) {
 }
 
 // ── app:// protocol handler ───────────────────────────────────────────────────
-// Serves the pre-built Next.js static export from disk.
-// All navigation is client-side (Next.js router) — no server needed.
 function registerAppProtocol() {
   protocol.handle('app', (request) => {
     let { pathname } = new URL(request.url)
-
-    // decode %20 etc.
     pathname = decodeURIComponent(pathname)
 
-    // Root
     if (pathname === '/' || pathname === '') {
       return electronNet.fetch(url.pathToFileURL(path.join(WEB_OUT, 'index.html')).href)
     }
 
-    // Exact file (JS, CSS, images, fonts)
     const exact = path.join(WEB_OUT, pathname)
     if (fs.existsSync(exact) && fs.statSync(exact).isFile()) {
       return electronNet.fetch(url.pathToFileURL(exact).href)
     }
 
-    // Next.js trailingSlash: try pathname/index.html
     const asDir = path.join(WEB_OUT, pathname.replace(/\/$/, ''), 'index.html')
     if (fs.existsSync(asDir)) {
       return electronNet.fetch(url.pathToFileURL(asDir).href)
     }
 
-    // SPA fallback — Next.js router handles the route in JS
     return electronNet.fetch(url.pathToFileURL(path.join(WEB_OUT, 'index.html')).href)
   })
 }
@@ -330,20 +205,15 @@ function createMainWindow() {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      // Allow fetching http://127.0.0.1:8000 from app:// origin
       webSecurity: false,
     },
   })
 
-  // Load the pre-built static app directly — no web server needed
   mainWindow.loadURL('app://localhost')
-
   mainWindow.once('ready-to-show', () => mainWindow.show())
-
   mainWindow.on('close', (e) => {
     if (!isQuitting) { e.preventDefault(); mainWindow.hide() }
   })
-
   mainWindow.webContents.setWindowOpenHandler(({ url: u }) => {
     shell.openExternal(u)
     return { action: 'deny' }
@@ -352,9 +222,6 @@ function createMainWindow() {
 
 // ── Tray ──────────────────────────────────────────────────────────────────────
 function createTray() {
-  // Use a dedicated 22×22 template PNG for the macOS menu bar.
-  // Template images are pure black + alpha — macOS inverts them automatically
-  // for dark/light mode so the icon is always visible.
   const trayPng = path.join(__dirname, 'build', 'tray-icon.png')
   const img = nativeImage.createFromPath(trayPng)
   tray = new Tray(img)
@@ -412,27 +279,9 @@ app.whenReady().then(async () => {
   const loading = createLoadingWindow()
   await new Promise(r => setTimeout(r, 300))
 
-  // Reuse existing API if already running (dev sessions / crash-restarts)
   const alreadyUp = await isAPIAlreadyUp()
   if (!alreadyUp) {
-    // First launch: venv doesn't exist yet — run full setup
-    if (!fs.existsSync(UVICORN)) {
-      setStatus(loading, 'First-time setup — opening Terminal…')
-      try {
-        await setupVenv(loading)
-      } catch (err) {
-        loading.close()
-        dialog.showErrorBox('Setup failed', err.message)
-        app.quit()
-        return
-      }
-    }
-
-    // Best-effort: start PostgreSQL + Redis via Homebrew
-    setStatus(loading, 'Starting services…')
-    await startDependencies()
-
-    setStatus(loading, 'Starting API…')
+    setStatus(loading, 'Starting Vex…')
     const proc = startAPI()
 
     proc.stderr.on('data', (d) => {
@@ -448,12 +297,7 @@ app.whenReady().then(async () => {
       loading.close()
       dialog.showErrorBox(
         'Startup failed',
-        `The API could not start.\n\n${err.message}\n\n` +
-        `Make sure PostgreSQL and Redis are installed and running:\n` +
-        `  brew install postgresql redis\n` +
-        `  brew services start postgresql\n` +
-        `  brew services start redis\n\n` +
-        `Then relaunch Vex.`
+        `Vex could not start.\n\n${err.message}\n\nTry relaunching Vex.`
       )
       app.quit()
       return

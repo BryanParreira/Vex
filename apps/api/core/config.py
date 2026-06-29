@@ -14,13 +14,8 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:3000"
     ALLOWED_ORIGINS: str = "http://localhost:3000"
 
-    # Database
-    DATABASE_URL: str = "postgresql+asyncpg://netindavoid:changeme@postgres:5432/netindavoid"
-
-    # Redis
-    REDIS_URL: str = "redis://redis:6379/0"
-    CELERY_BROKER_URL: str = "redis://redis:6379/1"
-    CELERY_RESULT_BACKEND: str = "redis://redis:6379/2"
+    # Database — SQLite by default (zero-install); override via DATABASE_URL env var
+    DATABASE_URL: str = "sqlite+aiosqlite:///./vex.db"
 
     # JWT
     JWT_SECRET_KEY: str = secrets.token_hex(32)

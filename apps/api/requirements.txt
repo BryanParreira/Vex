@@ -5,13 +5,8 @@ python-multipart==0.0.20
 
 # ── Database ──────────────────────────────────────────────────────────────────
 sqlalchemy[asyncio]==2.0.36
-asyncpg==0.30.0
+aiosqlite==0.20.0
 alembic==1.14.0
-psycopg2-binary==2.9.10
-
-# ── Cache / Messaging ─────────────────────────────────────────────────────────
-redis[hiredis]==5.2.1
-celery[redis]==5.4.0
 
 # ── Auth & Security ───────────────────────────────────────────────────────────
 python-jose[cryptography]==3.3.0
@@ -48,13 +43,4 @@ openpyxl==3.1.5
 python-dotenv==1.0.1
 structlog==24.4.0
 tenacity==9.0.0
-geopy==2.4.1
-geoip2==4.8.1
 paramiko==3.5.0
-
-# ── Testing ───────────────────────────────────────────────────────────────────
-pytest==8.3.4
-pytest-asyncio==0.24.0
-pytest-cov==6.0.0
-httpx==0.28.1
-factory-boy==3.3.1

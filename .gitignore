@@ -30,3 +30,8 @@ logs/
 
 # Electron build artifacts
 apps/electron/dist/
+
+# Bundled Python runtimes (built by CI / pack-hook.js — do not commit)
+apps/electron/python-runtime/
+apps/electron/python-runtime-arm64/
+apps/electron/python-runtime-x64/

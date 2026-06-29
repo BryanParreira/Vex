@@ -7,13 +7,22 @@ from core.config import settings
 
 logger = structlog.get_logger()
 
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=settings.APP_ENV == "development",
-    pool_pre_ping=True,
-    pool_size=20,
-    max_overflow=10,
-)
+_is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+
+if _is_sqlite:
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        echo=settings.APP_ENV == "development",
+        connect_args={"check_same_thread": False},
+    )
+else:
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        echo=settings.APP_ENV == "development",
+        pool_pre_ping=True,
+        pool_size=20,
+        max_overflow=10,
+    )
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
@@ -40,39 +49,19 @@ async def get_db() -> AsyncSession:
             await session.close()
 
 
-async def _try_timescaledb() -> bool:
-    """Enable TimescaleDB if available — runs in isolated transactions so failure never rolls back schema."""
-    try:
-        async with engine.begin() as conn:
-            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"))
-        async with engine.begin() as conn:
-            for table, col in [
-                ("traffic_samples", "sampled_at"),
-                ("dns_queries",     "queried_at"),
-                ("log_events",      "timestamp"),
-            ]:
-                await conn.execute(text(f"""
-                    SELECT create_hypertable('{table}', '{col}',
-                        if_not_exists => TRUE, migrate_data => TRUE);
-                """))
-        async with engine.begin() as conn:
-            for table in ["traffic_samples", "dns_queries", "log_events"]:
-                await conn.execute(text(f"""
-                    SELECT add_compression_policy('{table}',
-                        INTERVAL '7 days', if_not_exists => TRUE);
-                """))
-        logger.info("TimescaleDB hypertables created")
-        return True
-    except Exception as e:
-        logger.warning("TimescaleDB not available — running with plain PostgreSQL", error=str(e))
-        return False
+async def _enable_wal() -> None:
+    async with engine.begin() as conn:
+        await conn.execute(text("PRAGMA journal_mode=WAL"))
+        await conn.execute(text("PRAGMA foreign_keys=ON"))
+        await conn.execute(text("PRAGMA busy_timeout=5000"))
 
 
 async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    await _try_timescaledb()
-    logger.info("Database initialized")
+    if _is_sqlite:
+        await _enable_wal()
+    logger.info("Database initialized", backend="sqlite" if _is_sqlite else "postgresql")
 
 
 async def check_db_health() -> bool:

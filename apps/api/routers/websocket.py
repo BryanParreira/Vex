@@ -48,30 +48,8 @@ class PubSubBus:
             self.unsubscribe(channel, q)
 
     async def start(self):
-        """Launch background task that reads from Redis pubsub."""
-        if self._task and not self._task.done():
-            return
-        self._task = asyncio.create_task(self._run())
-
-    async def _run(self):
-        from core.redis import get_redis
-        r = get_redis()
-        pubsub = r.pubsub()
-        channels = ["traffic", "alerts", "devices", "logs"]
-        try:
-            await pubsub.subscribe(*channels)
-            async for msg in pubsub.listen():
-                if msg["type"] == "message":
-                    ch = msg["channel"]
-                    self._fanout(ch, msg["data"])
-        except Exception:
-            await asyncio.sleep(5)
-            self._task = asyncio.create_task(self._run())  # reconnect
-        finally:
-            try:
-                await pubsub.close()
-            except Exception:
-                pass
+        """No-op: publish_event() calls _fanout() directly — no broker needed."""
+        pass
 
 
 bus = PubSubBus()

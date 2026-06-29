@@ -14,7 +14,7 @@ class TimestampMixin:
 
 class TenantMixin:
     """All data tables include tenant_id for future multi-tenancy."""
-    from sqlalchemy.dialects.postgresql import UUID
+    from core.types import UUID
     import uuid
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(

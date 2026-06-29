@@ -4,7 +4,7 @@ from datetime import datetime
 
 from sqlalchemy import String, Boolean, Enum, ForeignKey, DateTime, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID, ARRAY
+from core.types import UUID, ARRAY
 
 from core.database import Base
 from models.mixins import TimestampMixin

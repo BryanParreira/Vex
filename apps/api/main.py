@@ -6,7 +6,6 @@ import structlog, subprocess, asyncio, os
 
 from core.config import settings
 from core.database import init_db, check_db_health, AsyncSessionLocal
-from core.redis import check_redis_health
 from middleware.rate_limit import setup_rate_limiting
 from routers import (
     devices, traffic, alerts, dns, scans, ai, websocket,
@@ -232,11 +231,10 @@ app.include_router(websocket.router)
 # ── Health & version ──────────────────────────────────────────────────────────
 @app.get("/health")
 async def health():
-    db_ok    = await check_db_health()
-    redis_ok = await check_redis_health()
-    status   = "healthy" if db_ok and redis_ok else "degraded"
+    db_ok  = await check_db_health()
+    status = "healthy" if db_ok else "degraded"
     return JSONResponse(
-        content={"status": status, "db": db_ok, "redis": redis_ok},
+        content={"status": status, "db": db_ok},
         status_code=200 if status == "healthy" else 503,
     )
 
